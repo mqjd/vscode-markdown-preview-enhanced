@@ -5,6 +5,7 @@ import {
   PreviewTheme,
   loadConfigsInDirectory,
 } from 'crossnote';
+import MarkdownItKroki from './md/markdown-it-kroki';
 import * as vscode from 'vscode';
 import {
   MarkdownPreviewEnhancedConfig,
@@ -44,6 +45,10 @@ class NotebooksManager {
       notebookPath: workspaceFolderUri.toString(),
       fs: wrapVSCodeFSAsApi(workspaceFolderUri.scheme),
       config: {},
+    });
+    notebook.md.use(MarkdownItKroki, {
+      fs: wrapVSCodeFSAsApi(workspaceFolderUri.scheme),
+      workspace: workspaceFolderUri,
     });
     this.notebooks.push(notebook);
     notebook.updateConfig(await this.loadNotebookConfig(uri));
