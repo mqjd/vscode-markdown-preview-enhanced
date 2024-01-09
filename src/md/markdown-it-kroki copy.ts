@@ -10,17 +10,9 @@ interface MarkdownItKrokiOptions {
   workspace: vscode.Uri;
 }
 
-interface TokenLoader {
-  [key: string]: {
-    loading: boolean;
-    loader: Promise<string>;
-    content: string;
-  };
-}
-
 export default (md: MarkdownIt, markdownItOptions: MarkdownItKrokiOptions) => {
   const defaultRenderer = md.renderer.rules.fence.bind(md.renderer.rules);
-  let loadingTokens: TokenLoader = {};
+  let asyncIds: { [key: string]: any } = {};
   md.renderer.rules.fence = (
     tokens: any,
     idx: any,
@@ -37,37 +29,30 @@ export default (md: MarkdownIt, markdownItOptions: MarkdownItKrokiOptions) => {
       langName = info.split(/\s+/g)[0];
     }
     if (langName === 'kroki') {
-      if (loadingTokens[idx] && loadingTokens[idx].loading === false) {
-        console.log(idx, '==3==');
-        const dataUrl = getUrl(loadingTokens[idx]?.content, config.lang);
-        loadingTokens[idx].loading = true
+      if (asyncIds[idx]) {
+        console.log(`===${idx} success===`);
+        const dataUrl = getUrl(asyncIds[idx], config.lang);
+        delete asyncIds[idx];
         return `<img src="${dataUrl}" alt="${langName}" />`;
       } else {
-        console.log(idx, '==1==');
-        loadingTokens[idx] = {
-          loading: true,
-          loader: readContent(code, markdownItOptions),
-          content: '',
-        };
+        readContent(code, markdownItOptions)
+          .then((content) => {
+            asyncIds[idx] = content;
+            console.log(`===${idx} start===`);
+            slf.renderToken(tokens, idx, options);
+            console.log(`===${idx} end===`);
+          })
+          .catch((error) => {
+            console.error(`Failed to load image: ${code}`, error);
+            return defaultRenderer(tokens, idx, options, env, slf);
+          });
+        console.log(`===${idx} loading===`);
         return `<img src="" alt="${langName}" />`;
       }
     } else {
       return defaultRenderer(tokens, idx, options, env, slf);
     }
   };
-  md.core.ruler.after('block', 'kroki', async (state) => {
-    const result = await Promise.all(
-      Object.entries(loadingTokens).map(async ([idx, { loader }]) => {
-        let code: string = await loader;
-        return [+idx, code];
-      }),
-    );
-    result.forEach(([idx, code]) => {
-      loadingTokens[idx].loading = false;
-      loadingTokens[idx].content = code as string;
-      state.md.renderer.renderToken(state.tokens, idx, state.md.options);
-    });
-  });
 };
 
 const readContent = async (code: string, options: MarkdownItKrokiOptions) => {
